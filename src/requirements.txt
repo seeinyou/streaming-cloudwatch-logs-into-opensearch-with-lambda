@@ -1,0 +1,9 @@
+# requests
+# clients
+elasticsearch>=7.5.1
+requests-aws4auth>=0.9
+crhelper>=2.0.5
+chardet
+charset-normalizer
+# To use OpenSearch
+opensearch-py

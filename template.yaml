@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Streaming-cloudwatch-logs-to-opensearch-with-lambda
+  Add the newly created IAM role to Elasticserach access policy
+
+Parameters:
+  OpenSearchServiceName:
+    Description: The OpenSearch service name for access. Serverless is aoss, Provision is es.
+    Type: String
+    Default: 'aoss'
+    AllowedValues:
+    - 'aoss'
+    - 'es'
+  OpenSearchDomain:
+    Description: The OpenSearch domain name of CloudWatch logs.
+    Type: String
+    Default: ''
+  OpenSearchIndexName:
+    Description: The name OpenSearch index name for CloudWatchs.
+    Type: String
+    Default: 'cloudwatch-logs'
+  IamRoleArnForLambda1:
+    Description: The ARN for IAM role for Lambda function.
+    Type: String
+
+Globals:
+  Function:
+    Timeout: 10
+    Environment:
+      Variables:
+        ES_SERVICE: !Ref OpenSearchServiceName
+        ES_INDEX: !Ref OpenSearchIndexName
+
+Resources:
+  # An IAM role for Lambda access to OpenSearch - Add it to the Elasticsearch domain access policy
+  IamRoleForLambdaToOpenSearch:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: lambda-execution-role-with-aos-access
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service: 'lambda.amazonaws.com'
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonOpenSearchServiceFullAccess'
+        - 'arn:aws:iam::aws:policy/CloudWatchFullAccess'
+
+
+  # Lambda Function - Add the subscription filter to CloudWatch log groups
+  SubscriptionFilterLogToAOSFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: This lambda Function is called by CloudWatch subscription filter. It processes CloudWatch logs and ingest logs into targeted OpenSearch.
+      CodeUri: src/
+      Handler: indexing-to-es.lambda_handler
+      Runtime: python3.8
+      Architectures:
+        - arm64
+      Timeout: 30
+      MemorySize: 1024
+      Role: !GetAtt IamRoleForLambdaToOpenSearch.Arn
+      Tracing: Active
+      Environment:
+        Variables:
+          ES_HOST: !Ref OpenSearchDomain
+          ES_INDEX: !Ref OpenSearchIndexName
+
+
+  # Lambda Function - Search logs from Elasticsearch
+  SearchAOSFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: This lambda Function searches CloudWatch logs in OpenSearch.
+      CodeUri: src/
+      Handler: search-es.lambda_handler
+      Runtime: python3.8
+      Architectures:
+        - arm64
+      Timeout: 30
+      MemorySize: 1024
+      Role: !GetAtt IamRoleForLambdaToOpenSearch.Arn
+      Tracing: Active
+      Environment:
+        Variables:
+          ES_HOST: !Ref OpenSearchDomain
+          ES_INDEX: !Ref OpenSearchIndexName
+
+# Outputs:
+
